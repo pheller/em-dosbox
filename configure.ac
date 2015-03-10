@@ -97,6 +97,10 @@ void blah(){
  AC_MSG_ERROR([Only libSDL 1.2.x or 2.0.x supported])])
  ])
 
+AC_ARG_WITH(sdl_net, [AC_HELP_STRING([--with-sdl-net@<:@=no/PATH@:>@],
+                  [Build using SDL_net.])],
+                  [], [with_sdl_net=no])
+
 dnl Checks for header files.
 
 dnl Checks for typedefs, structures, and compiler characteristics.
@@ -429,6 +433,7 @@ else
   LIBSDL_HEADER="SDL"
 fi
 
+AS_IF([test "x$enable_emscripten" != "xyes"],[
 if test x$host = xi386-pc-os2-emx ; then
   AC_MSG_CHECKING(for SDLNet_Init in ${LIBSDL_HEADER}_net);
   LIBS_BACKUP=$LIBS;
@@ -440,6 +445,11 @@ if test x$host = xi386-pc-os2-emx ; then
 else
 AC_CHECK_LIB(${LIBSDL_HEADER}_net, SDLNet_Init, have_sdl_net_lib=yes, , )
 fi
+])
+AS_IF([test "x$enable_emscripten" = "xyes"],[
+  have_sdl_net_lib=yes
+])
+
 if test x$have_sdl_net_lib = xyes -a x$have_sdl_net_h = xyes ; then
    LIBS="$LIBS -l${LIBSDL_HEADER}_net"
    AC_DEFINE(C_MODEM,1)
@@ -598,7 +608,21 @@ AS_IF([test "x$enable_emscripten" = "xyes"],[
        CXXFLAGS="$CXXFLAGS -Wno-warn-absolute-paths -I$with_sdl2/include"
     ])
   ])
+  AS_IF([test "x$with_sdl_net" != "xno"],[
+    AS_IF([test "x$with_sdl_net" = "xyes"],
+      [CXXFLAGS="$CXXFLAGS -s USE_SDL_NET=2"],
+      [LIBS="$LIBS -L$with_sdl_net/build/.libs/ -lSDL2_net"
+       CXXFLAGS="$CXXFLAGS -Wno-warn-absolute-paths -I$with_sdl2/include"
+    ])
+  ])
 ])
+
+AC_ARG_WITH(
+  [module],
+  [AC_HELP_STRING([--with-module@<:@=no/yes@:>@],
+    [Use Emscripten MODULARIZE functionality.])],
+  [], [with_module=no])
+AM_CONDITIONAL([EMSCRIPTEN_MODULE], [test "x$with_module" != "xno"])
 
 
 AC_CONFIG_FILES([ 
