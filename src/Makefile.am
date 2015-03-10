@@ -29,6 +29,9 @@ else
 # It is only required when using emterpreter.
 dosbox_LDFLAGS+=--memory-init-file 0
 endif
+if EMSCRIPTEN_MODULE
+dosbox_LDFLAGS+=-s MODULARIZE=1 -s EXPORT_NAME='"DOSBOX"' --post-js post.js
+endif
 endif
 
 # https://stackoverflow.com/questions/1779984/header-dependency-in-automake
