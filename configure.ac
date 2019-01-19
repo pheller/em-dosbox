@@ -97,6 +97,10 @@ void blah(){
  AC_MSG_RESULT([no]) 
  AC_MSG_ERROR([Only libSDL 1.2.x or 2.0.x supported])])
  ])
+AC_ARG_WITH(sdl-net, [AC_HELP_STRING([--with-sdl-net=no/PATH],
+                  [SDLnet is needed for IPX and modem emulation
+                  ])],
+                  [], [with_sdl_net=no])
 
 dnl Checks for header files.
 
@@ -461,6 +465,10 @@ else
 fi
 ])
 
+if test x$with_sdl_net = "xyes" ; then
+  EMMAKEN_CFLAGS="$EMMAKEN_CFLAGS -s USE_SDL=2 -s USE_SDL_NET=2"
+fi
+
 AH_TEMPLATE(C_MODEM,[Define to 1 to enable internal modem support, requires SDL_net])
 AH_TEMPLATE(C_IPX,[Define to 1 to enable IPX over Internet networking, requires SDL_net])
 AC_CHECK_HEADER(SDL_net.h,have_sdl_net_h=yes,)
@@ -489,6 +497,7 @@ if test x$have_sdl_net_lib = xyes -a x$have_sdl_net_h = xyes ; then
 else 
    AC_MSG_WARN([Can't find ${LIBSDL_HEADER}_net, internal modem and ipx disabled])
 fi
+
 
 AH_TEMPLATE(C_X11_XKB,[define to 1 if you have XKBlib.h and X11 lib])
 dnl Emscripten has X11 headers now, but DOSBox should only use SDL.
@@ -645,6 +654,13 @@ AS_IF([test "x$enable_emscripten" = "xyes"],[
       [CXXFLAGS="$CXXFLAGS -s USE_SDL=2"],
       [LIBS="$LIBS -L$with_sdl2/build/.libs/ -lSDL2"
        CXXFLAGS="$CXXFLAGS -Wno-warn-absolute-paths -I$with_sdl2/include"
+    ])
+  ])
+  AS_IF([test "x$with_sdl_net" != "xno"],[
+    AS_IF([test "x$with_sdl_net" = "xyes"],
+      [CXXFLAGS="$CXXFLAGS -s USE_SDL_NET=2"],
+      [LIBS="$LIBS -L$with_sdl_net/build/.libs/ -lSDL2_net"
+       CXXFLAGS="$CXXFLAGS -Wno-warn-absolute-paths -I$with_sdl_net"
     ])
   ])
 ])
