@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 from __future__ import print_function
 import sys, os, subprocess
 
@@ -94,12 +94,7 @@ def run_packager():
 
     packager_path = find_packager();
 
-    if 'PYTHON' in globals():
-        python_path = PYTHON
-    elif sys.version_info.major != 2:
-        python_path = 'python2' # Emscripten requires Python 2
-    else:
-        python_path = sys.executable
+    python_path = sys.executable
 
     try:
         res = subprocess.check_output([python_path, packager_path,
