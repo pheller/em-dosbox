@@ -18,7 +18,7 @@ dosbox_LDADD = cpu/libcpu.a debug/libdebug.a dos/libdos.a fpu/libfpu.a  hardware
 EXTRA_DIST = winres.rc dosbox.ico
 
 if EMSCRIPTEN_BUILD
-dosbox_LDFLAGS=-s TOTAL_MEMORY=134217728 -s ALLOW_MEMORY_GROWTH=0
+dosbox_LDFLAGS=-s TOTAL_MEMORY=134217728 -s ALLOW_MEMORY_GROWTH=0 -s FORCE_FILESYSTEM=1
 CLEANFILES=dosbox.js dosbox.html.mem dosbox.js.orig.js dosbox.js.tmp.js
 if EMTERPRETER
 dosbox_LDFLAGS+=-s EMTERPRETIFY=1 -s EMTERPRETIFY_ASYNC=1 -s EMTERPRETIFY_WHITELIST=@emterpretify.txt -s FETCH=1
@@ -29,7 +29,7 @@ else
 dosbox_LDFLAGS+=--memory-init-file 0
 endif
 if WEBASSEMBLY
-dosbox_LDFLAGS+=-s WASM=1
+dosbox_LDFLAGS+=-s WASM=1 -s 'BINARYEN_TRAP_MODE="clamp"'
 endif
 endif
 
