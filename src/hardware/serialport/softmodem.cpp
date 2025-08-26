@@ -153,7 +153,7 @@ void CSerialModem::SendRes(ResTypes response) {
 		case ResRING:		string="RING"; code=2; break;
 		case ResNODIALTONE: string="NO DIALTONE"; code=6; break;
 		case ResNOCARRIER:	string="NO CARRIER" ;code=3; break;
-		case ResCONNECT:	string="CONNECT 57600"; code=1; break;
+		case ResCONNECT:	string="CONNECT 2400"; code=1; break;
 	}
 	
 	if(doresponse!=1) {
