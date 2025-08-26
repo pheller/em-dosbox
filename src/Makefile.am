@@ -26,8 +26,8 @@ dosbox_LDFLAGS+=-s EMTERPRETIFY=1 -s EMTERPRETIFY_ASYNC=1 -s EMTERPRETIFY_WHITEL
 EXTRA_dosbox_DEPENDENCIES=emterpretify.txt
 else
 # Memory init file is huge and it doesn't save bandwith even if using gzip.
-# It is only required when using emterpreter.
-dosbox_LDFLAGS+=--memory-init-file 0
+# It is only required when using emterpreter, and is unsupported in later versions of emsdk.
+#dosbox_LDFLAGS+=--memory-init-file 0
 if ASYNCIFY
 dosbox_LDFLAGS+=-s ASYNCIFY=1 -s FETCH=1 -s ASYNCIFY_ONLY=@$(srcdir)/asyncify.txt
 EXTRA_dosbox_DEPENDENCIES=asyncify.txt
