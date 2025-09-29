@@ -223,8 +223,13 @@ protected:
 
 	Bitu listenport;
 	Bit8u reg[SREGS];
-	
-	
+
+	Bitu escape_state;           // 0=idle, 1=in_leading_guard, 2=collecting_plus, 3=in_trailing_guard
+	Bitu escape_timer;           // Timer for guard times
+	Bit8u escape_plus_buffer[3]; // Buffer to hold the plus characters
+	Bitu escape_plus_count;      // Number of plus characters collected
+	static const Bitu GUARD_TIME = 1000; // Guard time in ticks (1 second)
+
 	TCPServerSocket* serversocket;
 	TCPClientSocket* clientsocket;
 	TCPClientSocket* waitingclientsocket;

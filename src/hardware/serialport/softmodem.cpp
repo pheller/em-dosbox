@@ -233,7 +233,12 @@ void CSerialModem::Reset(){
 	cmdbuf[0]=0;
 	oldDTRstate = getDTR();
 	flowcontrol = 0;
-	plusinc = 0;
+
+    // Reset escape sequence state
+    escape_state = 0;
+    escape_timer = 0;
+    escape_plus_count = 0;
+
 	if(clientsocket) {
 		delete clientsocket;
 		clientsocket=0;
@@ -258,7 +263,12 @@ void CSerialModem::Reset(){
 void CSerialModem::EnterIdleState(void){
 	connected=false;
 	ringing=false;
-	
+
+    // Reset escape sequence state
+    escape_state = 0;
+    escape_timer = 0;
+    escape_plus_count = 0;
+
 	if(clientsocket) {
 		delete clientsocket;
 		clientsocket=0;
@@ -666,21 +676,60 @@ void CSerialModem::TelnetEmulation(Bit8u * data, Bitu size) {
 void CSerialModem::Timer2(void) {
 
 	unsigned long args = 1;
-	bool sendbyte = true;
 	Bitu usesize;
 	Bit8u txval;
-	Bitu txbuffersize =0;
+	Bitu txbuffersize = 0;
 
-	// Check for eventual break command
-	if (!commandmode) cmdpause++;
+	// Check for eventual break command and handle escape sequence timing
+	if (!commandmode) {
+		cmdpause++;
+
+		// Handle escape sequence state machine timeout conditions
+		switch (escape_state) {
+			case 0: // idle state
+				if (cmdpause > GUARD_TIME) {
+					escape_state = 1; // Enter leading guard time satisfied state
+				}
+				break;
+
+			case 1: // leading guard time satisfied, ready to collect plus characters
+				// Stay in this state until we get a character
+				break;
+
+			case 2: // collecting plus characters - waiting for trailing guard or more pluses
+				escape_timer++;
+				if (escape_timer > GUARD_TIME) {
+					// Trailing guard time expired without getting 3 pluses, send buffered characters
+					for (Bitu i = 0; i < escape_plus_count; i++) {
+						tmpbuf[txbuffersize++] = escape_plus_buffer[i];
+					}
+					escape_state = 0;
+					escape_plus_count = 0;
+					cmdpause = 0; // Reset for next potential escape sequence
+				}
+				break;
+
+			case 3: // in trailing guard time after receiving 3 plus characters
+				escape_timer++;
+				if (escape_timer > GUARD_TIME) {
+					// Successfully completed escape sequence
+					commandmode = true;
+					SendRes(ResOK);
+					escape_state = 0;
+					escape_plus_count = 0;
+					cmdpause = 0;
+				}
+				break;
+		}
+	}
+
 	// Handle incoming data from serial port, read as much as available
-	CSerial::setCTS(true);	// buffer will get 'emptier', new data can be received 
+	CSerial::setCTS(true);	// buffer will get 'emptier', new data can be received
 	while (tqueue->inuse()) {
 		txval = tqueue->getb();
 		if (commandmode) {
 			if (echo) {
 				rqueue->addb(txval);
-				//LOG_MSG("Echo back to queue: %x",txval);
 			}
 			if (txval==0xa) continue;		//Real modem doesn't seem to skip this?
 			else if (txval==0x8 && (cmdpos > 0)) --cmdpos;	// backspace
@@ -692,37 +741,87 @@ void CSerialModem::Timer2(void) {
 				}
 			}
 		}
-		else {// + character
-			// 1000 ticks have passed, can check for pause command
-			if (cmdpause > 1000) {
-				if(txval ==reg[MREG_ESCAPE_CHAR]) // +
-				{
-					plusinc++;
-					if(plusinc>=3) {
-						LOG_MSG("Modem: Entering command mode(escape sequence)");
-						commandmode = true;
-						SendRes(ResOK);
-						plusinc = 0;
+		else { // connected mode - handle escape sequence detection
+			bool should_send_char = true;
+			bool is_plus = (txval == reg[MREG_ESCAPE_CHAR]);
+
+			// Handle escape sequence state machine
+			switch (escape_state) {
+				case 0: // idle state - just send the character and reset guard timer
+					// ANY character in idle state resets the guard time counter
+					cmdpause = 0;
+					break;
+
+				case 1: // leading guard time satisfied - waiting for first plus
+					if (is_plus) {
+						// Got first plus after guard time
+						escape_plus_buffer[0] = txval;
+						escape_plus_count = 1;
+						escape_timer = 0;
+						escape_state = 2;
+						should_send_char = false; // Don't send yet
+						// Do NOT reset cmdpause - let it keep counting
+					} else {
+						// Not a plus, abort and send character normally
+						escape_state = 0;
+						cmdpause = 0; // Reset now that we're back to idle
 					}
-					sendbyte=false;
-				} else {
-					plusinc=0;
-				}
-	// If not a special pause command, should go for bigger blocks to send 
+					break;
+
+				case 2: // collecting plus characters
+					if (is_plus) {
+						// Another plus
+						if (escape_plus_count < 3) {
+							escape_plus_buffer[escape_plus_count] = txval;
+							escape_plus_count++;
+							escape_timer = 0; // Reset timer for trailing guard
+							should_send_char = false; // Don't send yet
+
+							if (escape_plus_count == 3) {
+								escape_state = 3; // Move to trailing guard state
+							}
+						}
+						// Do NOT reset cmdpause - let it keep counting
+					} else {
+						// Non-plus character received, send all buffered plus chars + this char
+						for (Bitu i = 0; i < escape_plus_count; i++) {
+							tmpbuf[txbuffersize++] = escape_plus_buffer[i];
+						}
+						escape_state = 0;
+						escape_plus_count = 0;
+						cmdpause = 0; // Reset now that we're back to idle
+						// This character will be sent normally below
+					}
+					break;
+
+				case 3: // in trailing guard time after 3 plus characters
+					// Any character during trailing guard time aborts escape sequence
+					for (Bitu i = 0; i < escape_plus_count; i++) {
+						tmpbuf[txbuffersize++] = escape_plus_buffer[i];
+					}
+					escape_state = 0;
+					escape_plus_count = 0;
+					cmdpause = 0; // Reset now that we're back to idle
+					// This character will be sent normally below
+					break;
 			}
-			tmpbuf[txbuffersize] = txval;
-			txbuffersize++;
+
+			if (should_send_char) {
+				tmpbuf[txbuffersize] = txval;
+				txbuffersize++;
+			}
 		}
 	} // while loop
-	
-	if (clientsocket && sendbyte && txbuffersize) {
-		// down here it saves a lot of network traffic
-		if(!clientsocket->SendArray(tmpbuf,txbuffersize)) {
+
+	if (clientsocket && txbuffersize) {
+		// Send accumulated data
+		if(!clientsocket->SendArray(tmpbuf, txbuffersize)) {
 			SendRes(ResNOCARRIER);
 			EnterIdleState();
 		}
 	}
-	// Handle incoming to the serial port
+
+	// Handle incoming data from remote connection
 	if(!commandmode && clientsocket && rqueue->left()) {
 		usesize = rqueue->left();
 		if (usesize>16) usesize=16;
@@ -730,16 +829,17 @@ void CSerialModem::Timer2(void) {
 			SendRes(ResNOCARRIER);
 			EnterIdleState();
 		} else if(usesize) {
-			// Filter telnet commands 
+			// Filter telnet commands
 			if(telnetmode) TelnetEmulation(tmpbuf, usesize);
 			else rqueue->adds(tmpbuf,usesize);
-			cmdpause = 0;
-		} 
+			// Receiving data from remote does NOT reset cmdpause
+			// cmdpause only counts LOCAL transmit silence for the escape sequence
+		}
 	}
 	// Check for incoming calls
 	if (!connected && !waitingclientsocket && serversocket) {
 		waitingclientsocket=serversocket->Accept();
-		if(waitingclientsocket) {	
+		if(waitingclientsocket) {
 			if(!CSerial::getDTR()) {
 				// accept no calls with DTR off; TODO: AT &Dn
 				EnterIdleState();
